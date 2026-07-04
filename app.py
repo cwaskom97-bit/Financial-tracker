@@ -32,7 +32,6 @@ def fmt(n):
 
 # Seeded pseudo-random history builder matching JS logic
 def build_history():
-    # Fixed seed values to mirror JS rnd()
     state = 7
     def deterministic_rnd():
         nonlocal state
@@ -150,7 +149,7 @@ with col_title:
 with col_theme:
     if st.button("☀️ Light" if st.session_state.dark_mode else "🌙 Dark"):
         st.session_state.dark_mode = not st.session_state.dark_mode
-        st.sidebar.empty() # Force reload dynamic colors
+        st.rerun()
 
 # Navigation Tabs
 tabs = st.tabs(["📊 Executive Dashboard", "🧠 AI Insights & Forecasting", "🧾 Invoices & Scenario Studio"])
@@ -281,7 +280,6 @@ with tabs[2]:
         mkt = st.slider("Marketing budget shifts ($/mo)", min_value=-30000, max_value=80000, step=1000, value=st.session_state.scenario_marketing)
         prc = st.slider("Pricing matrix variance (%)", min_value=-20, max_value=20, value=st.session_state.scenario_price)
         
-        # Save updates to session variables
         st.session_state.scenario_headcount = hc
         st.session_state.scenario_marketing = mkt
         st.session_state.scenario_price = prc
@@ -292,16 +290,13 @@ with tabs[2]:
             st.session_state.scenario_price = 0
             st.rerun()
 
-        # Generate dynamically affected charts on the fly!
         simulated_forecast = build_forecast(HISTORY, hc, mkt, prc)
         st.line_chart(simulated_forecast.set_index("Quarter")[["Expected Profit"]], color=["#d4a94f"])
 
     st.markdown("---")
     
-    # AI Conversational Chat System
     st.subheader("💬 AI Conversational Co-Pilot")
     
-    # Custom Suggestion Buttons
     suggestion_cols = st.columns(4)
     s_queries = [
         "Predict next quarter's revenue", 
@@ -310,7 +305,6 @@ with tabs[2]:
         "Show marketing ROI"
     ]
     
-    # Process queries using the logic map
     def get_ai_reply(query):
         q = query.lower()
         if "hire" in q or "headcount" in q:
@@ -323,19 +317,16 @@ with tabs[2]:
             return "Next quarter's expected profit parameters are trending positively with a 95% baseline accuracy model calculation."
         return "I looked across revenue, spend, and charts. Give me a more specific timeframe or criteria to look up!"
 
-    # Render suggestion chips
     for idx, prompt_text in enumerate(s_queries):
         with suggestion_cols[idx]:
             if st.button(prompt_text, key=f"sug_{idx}"):
                 st.session_state.chat_history.append({"role": "user", "text": prompt_text})
                 st.session_state.chat_history.append({"role": "ai", "text": get_ai_reply(prompt_text)})
 
-    # Message logs
     for msg in st.session_state.chat_history:
         with st.chat_message("user" if msg["role"] == "user" else "assistant"):
             st.write(msg["text"])
 
-    # Input handling
     if chat_input := st.chat_input("Ask a financial question..."):
         st.session_state.chat_history.append({"role": "user", "text": chat_input})
         st.session_state.chat_history.append({"role": "ai", "text": get_ai_reply(chat_input)})
