@@ -125,22 +125,25 @@ RECOMMENDATIONS = [
     {"title": "Renegotiate WeWork contract ahead of 45-day renewal window", "impact": 4200, "effort": "Medium"},
 ]
 
-# Theme Injection Styling
+# Config Theme Values
 bg_color = "#0b0e14" if st.session_state.dark_mode else "#f6f3ec"
 text_color = "#e7e3d8" if st.session_state.dark_mode else "#1c1a14"
 card_color = "#12161f" if st.session_state.dark_mode else "#ffffff"
 border_color = "#232a38" if st.session_state.dark_mode else "#ddd6c4"
 
-st.markdown(f"""
+# Safe Global Styles injection via string formatting instead of raw f-strings
+styles = """
     <style>
-    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+    .stApp {{ background-color: {bg}; color: {txt}; }}
     div[data-testid="stMetricValue"] {{ font-family: monospace; font-weight: 700; }}
     .kpi-card {{
-        background-color: {card_color}; border: 1px solid {border_color};
+        background-color: {card}; border: 1px solid {border};
         padding: 15px; border-radius: 8px; margin-bottom: 10px;
     }}
     </style>
-""", unsafe_allowed_html=True)
+""".format(bg=bg_color, txt=text_color, card=card_color, border=border_color)
+
+st.markdown(styles, unsafe_allowed_html=True)
 
 # Top Navbar Area
 col_title, col_theme = st.columns([9, 1])
@@ -187,15 +190,21 @@ with tabs[0]:
 
     with col_gauge:
         st.subheader("System Health Metrics")
-        st.markdown(f"""
+        
+        # Calculate runway runtime value safely ahead of layout component
+        runway_val = f"{cash_on_hand / (burn_rate if burn_rate else 1):.0f} mos" if burn_rate else 'Infinite'
+        
+        gauge_html = """
         <div class='kpi-card' style='text-align: center;'>
             <h1 style='color: #d4a94f; font-size: 48px; margin: 0;'>64</h1>
             <p style='letter-spacing: 2px; text-transform: uppercase; font-size: 12px;'>AI Health Score / 100</p>
-            <hr style='border-color: {border_color};'/>
+            <hr style='border-color: {border};'/>
             <p style='font-size: 13px;'>Positive net income, but margin compressed by marketing overspend.</p>
-            <p style='font-size: 13px; font-weight: bold;'>Cash Runway: {f"{cash_on_hand / (burn_rate if burn_rate else 1):.0f} mos" if burn_rate else 'Infinite'}</p>
+            <p style='font-size: 13px; font-weight: bold;'>Cash Runway: {runway}</p>
         </div>
-        """, unsafe_allowed_html=True)
+        """.format(border=border_color, runway=runway_val)
+        
+        st.markdown(gauge_html, unsafe_allowed_html=True)
 
     st.subheader("Budget vs Actual Expenditures by Department")
     dept_chart = DEPARTMENTS.set_index("Department")[["Budget", "Actual"]]
@@ -217,29 +226,31 @@ with tabs[1]:
     with col_alerts:
         st.subheader("🚨 Waste, Fraud & Anomaly Flags")
         for alert in ALERTS:
-            st.markdown(f"""
+            alert_html = """
             <div class='kpi-card'>
                 <div style='display: flex; justify-content: space-between;'>
-                    <b>{alert['title']}</b>
-                    <span style='color:#c0604f; font-size:11px;'>{alert['severity']}</span>
+                    <b>{title}</b>
+                    <span style='color:#c0604f; font-size:11px;'>{severity}</span>
                 </div>
-                <p style='font-size: 12px; opacity: 0.8;'>{alert['detail']}</p>
-                <span style='font-family: monospace; color:#d4a94f;'>Est Impact: {fmt(alert['impact'])}/mo</span>
+                <p style='font-size: 12px; opacity: 0.8;'>{detail}</p>
+                <span style='font-family: monospace; color:#d4a94f;'>Est Impact: {impact}/mo</span>
             </div>
-            """, unsafe_allowed_html=True)
+            """.format(title=alert['title'], severity=alert['severity'], detail=alert['detail'], impact=fmt(alert['impact']))
+            st.markdown(alert_html, unsafe_allowed_html=True)
 
     with col_recomms:
         st.subheader("✨ Autonomous AI Optimizations")
         for rec in RECOMMENDATIONS:
-            st.markdown(f"""
+            rec_html = """
             <div class='kpi-card'>
                 <div style='display: flex; justify-content: space-between;'>
-                    <b>{rec['title']}</b>
-                    <span style='color:#4fae7c; font-weight: bold;'>+{fmt(rec['impact'])}/mo</span>
+                    <b>{title}</b>
+                    <span style='color:#4fae7c; font-weight: bold;'>+{impact}/mo</span>
                 </div>
-                <p style='font-size: 11px; opacity: 0.7; margin-top: 5px;'>Effort Complexity: {rec['effort']}</p>
+                <p style='font-size: 11px; opacity: 0.7; margin-top: 5px;'>Effort Complexity: {effort}</p>
             </div>
-            """, unsafe_allowed_html=True)
+            """.format(title=rec['title'], impact=fmt(rec['impact']), effort=rec['effort'])
+            st.markdown(rec_html, unsafe_allowed_html=True)
 
 
 # ---------------------------------------------------------------------
@@ -260,15 +271,16 @@ with tabs[2]:
                 amt_choice = random.randint(500, 24500)
                 po_match = random.choice([True, False])
                 
-                st.markdown(f"""
+                invoice_html = """
                 <div class='kpi-card' style='font-family: monospace; font-size:13px;'>
                     <span style='color:#4fae7c;'>✔ Extraction Process Completed Successfully</span><br/><br/>
-                    <b>File Name:</b> {uploaded_file.name}<br/>
-                    <b>Identified Vendor:</b> {v_choice}<br/>
-                    <b>Calculated Total:</b> {fmt(amt_choice)}<br/>
-                    <b>PO Registry Status:</b> {'Matched' if po_match else 'No matching PO Found'}
+                    <b>File Name:</b> {file}<br/>
+                    <b>Identified Vendor:</b> {vendor}<br/>
+                    <b>Calculated Total:</b> {amount}<br/>
+                    <b>PO Registry Status:</b> {status}
                 </div>
-                """, unsafe_allowed_html=True)
+                """.format(file=uploaded_file.name, vendor=v_choice, amount=fmt(amt_choice), status='Matched' if po_match else 'No matching PO Found')
+                st.markdown(invoice_html, unsafe_allowed_html=True)
 
         st.subheader("📋 Active Contract & Renewal Schedules")
         st.table(pd.DataFrame(VENDORS))
@@ -308,7 +320,7 @@ with tabs[2]:
     def get_ai_reply(query):
         q = query.lower()
         if "hire" in q or "headcount" in q:
-            return f"Modeling new hires at a blended $9,500/mo fully-loaded cost each. Forecast matrices dynamically shifted inside your Sandbox panel."
+            return "Modeling new hires at a blended $9,500/mo fully-loaded cost each. Forecast matrices dynamically shifted inside your Sandbox panel."
         elif "marketing" in q:
             return "Marketing ROI this quarter: for every $1 spent on Meta + Google Ads, we're seeing roughly $2.40 in pipeline value down from $3.10 last quarter."
         elif "waste" in q or "unused" in q or "subscription" in q:
