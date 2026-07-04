@@ -13,11 +13,13 @@ st.set_page_config(
 )
 
 # Initialize Session State Variables
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = True
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
-        {"role": "ai", "text": 'Ask me anything — e.g. "Predict next quarter\'s revenue" or "What if we hire 50 people?"'}
+        {"role": "ai", "text": 'System ready. Once a live business integration is established, I can predict quarters, analyze runway, and audit vendor anomalies.'}
     ]
 if "scenario_headcount" not in st.session_state:
     st.session_state.scenario_headcount = 0
@@ -30,100 +32,40 @@ if "scenario_price" not in st.session_state:
 def fmt(n):
     return f"${int(round(n)):,}"
 
-# Seeded pseudo-random history builder matching JS logic
-def build_history():
-    state = 7
-    def deterministic_rnd():
-        nonlocal state
-        state = (state * 9301 + 49297) % 233280
-        return state / 233280
-
+# --- INITIAL EMPTY STATE DATA STRUCTURES (READY FOR LIVE CONNECTION) ---
+# Set to 0 and empty placeholders until an external corporate API/ERP is linked.
+def build_empty_history():
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    rows = []
-    revenue = 480000
-    expenses = 430000
-    
-    for m in months:
-        revenue *= 1 + (0.015 + (deterministic_rnd() - 0.45) * 0.03)
-        expenses *= 1 + (0.012 + (deterministic_rnd() - 0.5) * 0.025)
-        rows.append({
-            "Month": m,
-            "Revenue": round(revenue),
-            "Expenses": round(expenses),
-            "Profit": round(revenue - expenses)
-        })
+    rows = [{"Month": m, "Revenue": 0, "Expenses": 0, "Profit": 0} for m in months]
     return pd.DataFrame(rows)
 
-HISTORY = build_history()
+HISTORY = build_empty_history()
 
 def build_forecast(history_df, headcount_delta=0, marketing_delta=0, price_delta=0):
-    n = len(history_df)
-    xs = np.arange(n)
-    rev_ys = history_df["Revenue"].values * (1 + price_delta / 100)
-    exp_ys = history_df["Expenses"].values + (headcount_delta * 9500) + marketing_delta
-
-    def fit_linear(ys):
-        xm = np.mean(xs)
-        ym = np.mean(ys)
-        num = np.sum((xs - xm) * (ys - ym))
-        den = np.sum((xs - xm) ** 2)
-        slope = num / (den if den != 0 else 1)
-        intercept = ym - slope * xm
-        residuals = ys - (slope * xs + intercept)
-        vol = np.sqrt(np.sum(residuals ** 2) / n)
-        return slope, intercept, vol
-
-    r_slope, r_intercept, r_vol = fit_linear(rev_ys)
-    e_slope, e_intercept, e_vol = fit_linear(exp_ys)
-
+    # Generates zeroed baselines when no historical data exists
     forecast_rows = []
     for step in range(1, 5):
-        x = n - 1 + step
-        rev_exp = r_slope * x + r_intercept
-        exp_exp = e_slope * x + e_intercept
-        band = (r_vol + e_vol) * (1 + 0.3 * step)
-        
         forecast_rows.append({
             "Quarter": f"Q+{step}",
-            "Expected Profit": round(rev_exp - exp_exp),
-            "Optimistic Profit": round(rev_exp - exp_exp + band),
-            "Worst-case Profit": round(rev_exp - exp_exp - band),
-            "Revenue Forecast": round(rev_exp),
-            "Expenses Forecast": round(exp_exp)
+            "Expected Profit": 0,
+            "Optimistic Profit": 0,
+            "Worst-case Profit": 0,
+            "Revenue Forecast": 0,
+            "Expenses Forecast": 0
         })
     return pd.DataFrame(forecast_rows)
 
 DEPARTMENTS = pd.DataFrame([
-    {"Department": "Engineering", "Budget": 180000, "Actual": 196500},
-    {"Department": "Marketing", "Budget": 90000, "Actual": 131000},
-    {"Department": "Sales", "Budget": 70000, "Actual": 66200},
-    {"Department": "Operations", "Budget": 50000, "Actual": 52800},
-    {"Department": "People & HR", "Budget": 30000, "Actual": 28100},
+    {"Department": "Engineering", "Budget": 0, "Actual": 0},
+    {"Department": "Marketing", "Budget": 0, "Actual": 0},
+    {"Department": "Sales", "Budget": 0, "Actual": 0},
+    {"Department": "Operations", "Budget": 0, "Actual": 0},
+    {"Department": "People & HR", "Budget": 0, "Actual": 0},
 ])
 
-VENDORS = [
-    {"Vendor": "AWS", "Category": "Cloud Infra", "Monthly": 22000, "Renews In": "62d", "Status": "Active"},
-    {"Vendor": "Google Cloud", "Category": "Cloud Infra", "Monthly": 4500, "Renews In": "62d", "Status": "Overlap (Med Risk)"},
-    {"Vendor": "Datadog", "Category": "Observability", "Monthly": 3200, "Renews In": "14d", "Status": "Overlap (Med Risk)"},
-    {"Vendor": "New Relic", "Category": "Observability", "Monthly": 2900, "Renews In": "201d", "Status": "Overlap (Med Risk)"},
-    {"Vendor": "HubSpot", "Category": "Marketing", "Monthly": 6500, "Renews In": "9d", "Status": "Active"},
-    {"Vendor": "WeWork", "Category": "Facilities", "Monthly": 15000, "Renews In": "45d", "Status": "Active"},
-    {"Vendor": "Sable Logistics LLC", "Category": "Consulting", "Monthly": 18500, "Renews In": "3d", "Status": "Flagged (High Risk)"},
-]
-
-ALERTS = [
-    {"severity": "🚨 CRITICAL", "title": "Suspicious vendor payment", "detail": "$18,500 paid to 'Sable Logistics LLC' — no prior invoice history, no PO match.", "impact": 18500},
-    {"severity": "⚠️ HIGH", "title": "Duplicate observability spend", "detail": "Datadog and New Relic both bill for APM/monitoring — redundant coverage.", "impact": 2900},
-    {"severity": "⚠️ HIGH", "title": "Marketing overspend, 46% over budget", "detail": "Meta Ads spend spiked to $41,000 this month vs a planned $28,000.", "impact": 13000},
-    {"severity": "ℹ️ MEDIUM", "title": "Duplicate charge detected", "detail": "WeWork billed twice within the same 7-day window for the same $15,000 amount.", "impact": 15000},
-]
-
-RECOMMENDATIONS = [
-    {"title": "Freeze payment to Sable Logistics LLC pending vendor verification", "impact": 18500, "effort": "Medium"},
-    {"title": "Cap Meta Ads emergency-boost approvals at $5,000 without VP sign-off", "impact": 13000, "effort": "Low"},
-    {"title": "Consolidate observability tooling onto Datadog", "impact": 2900, "effort": "Low"},
-    {"title": "Renegotiate WeWork contract ahead of 45-day renewal window", "impact": 4200, "effort": "Medium"},
-]
+VENDORS = []  # No active contracts mapped yet
+ALERTS = []   # No transaction risks identified on empty books
+RECOMMENDATIONS = []
 
 # Config Theme Values
 bg_color = "#0b0e14" if st.session_state.dark_mode else "#f6f3ec"
@@ -145,14 +87,59 @@ styles = """
 
 st.markdown(styles, unsafe_allow_html=True)
 
+
+# ---------------------------------------------------------------------
+# SCREEN 1: LOGIN PORTAL
+# ---------------------------------------------------------------------
+if not st.session_state.logged_in:
+    st.markdown("<br/><br/>", unsafe_allow_html=True)
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    
+    with col_l2:
+        st.markdown(f"""
+        <div class='kpi-card' style='padding: 30px;'>
+            <h2 style='text-align: center; margin-top: 0;'>💼 Corporate Intelligence Login</h2>
+            <p style='text-align: center; font-size: 13px; opacity: 0.7;'>
+                Enter administrative credentials to unlock data synchronizations.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        username = st.text_input("Username/Email", placeholder="admin@company.com")
+        password = st.text_input("Security Access Password", type="password", placeholder="••••••••")
+        
+        st.markdown("<br/>", unsafe_allow_html=True)
+        if st.button("Authenticate System Access", use_container_width=True):
+            # Simple demonstration authentication logic
+            if username == "admin" and password == "password":
+                st.session_state.logged_in = True
+                st.success("Access Verified. Initializing platform workspace...")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Invalid credentials. Please verify administrative portal permissions.")
+                
+    st.stop()  # Prevents code below from executing unless logged_in is true
+
+
+# ---------------------------------------------------------------------
+# SCREEN 2: MAIN DASHBOARD APPLICATION (ACCESS GRANTED)
+# ---------------------------------------------------------------------
 # Top Navbar Area
-col_title, col_theme = st.columns([9, 1])
+col_title, col_theme, col_logout = st.columns([8, 1, 1])
 with col_title:
     st.title("🎛️ AI-POWERED FINANCIAL INTELLIGENCE ENGINE")
 with col_theme:
-    if st.button("☀️ Light" if st.session_state.dark_mode else "🌙 Dark"):
+    if st.button("☀️ Light" if st.session_state.dark_mode else "🌙 Dark", use_container_width=True):
         st.session_state.dark_mode = not st.session_state.dark_mode
         st.rerun()
+with col_logout:
+    if st.button("🔒 Log Out", use_container_width=True):
+        st.session_state.logged_in = False
+        st.rerun()
+
+# Integration Management Notice Area
+st.info("🔌 System running on zeroed parameters. Connect your company's ERP (QuickBooks, NetSuite, SAP) or banking APIs to stream verified metrics.")
 
 # Navigation Tabs
 tabs = st.tabs(["📊 Executive Dashboard", "🧠 AI Insights & Forecasting", "🧾 Invoices & Scenario Studio"])
@@ -161,24 +148,21 @@ tabs = st.tabs(["📊 Executive Dashboard", "🧠 AI Insights & Forecasting", "�
 # TAB 1: EXECUTIVE DASHBOARD
 # ---------------------------------------------------------------------
 with tabs[0]:
-    latest = HISTORY.iloc[-1]
-    prev = HISTORY.iloc[-2]
-    
-    rev_delta = float(((latest['Revenue'] - prev['Revenue']) / prev['Revenue']) * 100)
-    exp_delta = float(((latest['Expenses'] - prev['Expenses']) / prev['Expenses']) * 100)
-    burn_rate = abs(latest['Profit']) if latest['Profit'] < 0 else 0
-    cash_on_hand = 2100000
+    rev_delta = 0.0
+    exp_delta = 0.0
+    burn_rate = 0
+    cash_on_hand = 0
 
     # KPI Summary Cards
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric(label="Revenue", value=fmt(latest['Revenue']), delta=f"{rev_delta:.1%}")
+        st.metric(label="Revenue", value=fmt(0), delta=f"{rev_delta:.1%}")
     with c2:
-        st.metric(label="Operating Expenses", value=fmt(latest['Expenses']), delta=f"{exp_delta:.1%}", delta_color="inverse")
+        st.metric(label="Operating Expenses", value=fmt(0), delta=f"{exp_delta:.1%}", delta_color="inverse")
     with c3:
-        st.metric(label="Net Income", value=fmt(latest['Profit']), delta=fmt(latest['Profit'] - prev['Profit']))
+        st.metric(label="Net Income", value=fmt(0), delta=fmt(0))
     with c4:
-        st.metric(label="Burn Rate", value=fmt(burn_rate) + "/mo" if burn_rate else "None", delta="0.0%")
+        st.metric(label="Burn Rate", value="None", delta="0.0%")
 
     st.markdown("---")
     
@@ -191,18 +175,15 @@ with tabs[0]:
     with col_gauge:
         st.subheader("System Health Metrics")
         
-        # Calculate runway runtime value safely ahead of layout component
-        runway_val = f"{cash_on_hand / (burn_rate if burn_rate else 1):.0f} mos" if burn_rate else 'Infinite'
-        
         gauge_html = """
         <div class='kpi-card' style='text-align: center;'>
-            <h1 style='color: #d4a94f; font-size: 48px; margin: 0;'>64</h1>
+            <h1 style='color: #7c8494; font-size: 48px; margin: 0;'>--</h1>
             <p style='letter-spacing: 2px; text-transform: uppercase; font-size: 12px;'>AI Health Score / 100</p>
             <hr style='border-color: {border};'/>
-            <p style='font-size: 13px;'>Positive net income, but margin compressed by marketing overspend.</p>
-            <p style='font-size: 13px; font-weight: bold;'>Cash Runway: {runway}</p>
+            <p style='font-size: 13px; opacity:0.6;'>Awaiting live enterprise pipeline ledger connections.</p>
+            <p style='font-size: 13px; font-weight: bold;'>Cash Runway: Uncalculated</p>
         </div>
-        """.format(border=border_color, runway=runway_val)
+        """.format(border=border_color)
         
         st.markdown(gauge_html, unsafe_allow_html=True)
 
@@ -225,32 +206,13 @@ with tabs[1]:
     col_alerts, col_recomms = st.columns(2)
     with col_alerts:
         st.subheader("🚨 Waste, Fraud & Anomaly Flags")
-        for alert in ALERTS:
-            alert_html = """
-            <div class='kpi-card'>
-                <div style='display: flex; justify-content: space-between;'>
-                    <b>{title}</b>
-                    <span style='color:#c0604f; font-size:11px;'>{severity}</span>
-                </div>
-                <p style='font-size: 12px; opacity: 0.8;'>{detail}</p>
-                <span style='font-family: monospace; color:#d4a94f;'>Est Impact: {impact}/mo</span>
-            </div>
-            """.format(title=alert['title'], severity=alert['severity'], detail=alert['detail'], impact=fmt(alert['impact']))
-            st.markdown(alert_html, unsafe_allow_html=True)
+        if not ALERTS:
+            st.markdown("<p style='font-size:13px; opacity:0.5;'>No transaction history analyzed yet.</p>", unsafe_allow_html=True)
 
     with col_recomms:
         st.subheader("✨ Autonomous AI Optimizations")
-        for rec in RECOMMENDATIONS:
-            rec_html = """
-            <div class='kpi-card'>
-                <div style='display: flex; justify-content: space-between;'>
-                    <b>{title}</b>
-                    <span style='color:#4fae7c; font-weight: bold;'>+{impact}/mo</span>
-                </div>
-                <p style='font-size: 11px; opacity: 0.7; margin-top: 5px;'>Effort Complexity: {effort}</p>
-            </div>
-            """.format(title=rec['title'], impact=fmt(rec['impact']), effort=rec['effort'])
-            st.markdown(rec_html, unsafe_allow_html=True)
+        if not RECOMMENDATIONS:
+            st.markdown("<p style='font-size:13px; opacity:0.5;'>No strategic cost reductions calculated yet.</p>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------
@@ -266,24 +228,22 @@ with tabs[2]:
         if uploaded_file is not None:
             with st.spinner("Executing Intelligent Line-Item Parsing..."):
                 time.sleep(1.1)
-                mock_vendors = ["AWS", "HubSpot", "WeWork", "Doyle & Marsh LLP", "Figma"]
-                v_choice = random.choice(mock_vendors)
-                amt_choice = random.randint(500, 24500)
-                po_match = random.choice([True, False])
-                
                 invoice_html = """
                 <div class='kpi-card' style='font-family: monospace; font-size:13px;'>
-                    <span style='color:#4fae7c;'>✔ Extraction Process Completed Successfully</span><br/><br/>
+                    <span style='color:#4fae7c;'>✔ Extraction Process Completed</span><br/><br/>
                     <b>File Name:</b> {file}<br/>
-                    <b>Identified Vendor:</b> {vendor}<br/>
+                    <b>Identified Vendor:</b> Unregistered New Vendor<br/>
                     <b>Calculated Total:</b> {amount}<br/>
-                    <b>PO Registry Status:</b> {status}
+                    <b>PO Registry Status:</b> Pending Connection Sync
                 </div>
-                """.format(file=uploaded_file.name, vendor=v_choice, amount=fmt(amt_choice), status='Matched' if po_match else 'No matching PO Found')
+                """.format(file=uploaded_file.name, amount=fmt(0))
                 st.markdown(invoice_html, unsafe_allow_html=True)
 
         st.subheader("📋 Active Contract & Renewal Schedules")
-        st.table(pd.DataFrame(VENDORS))
+        if VENDORS:
+            st.table(pd.DataFrame(VENDORS))
+        else:
+            st.markdown("<p style='font-size:13px; opacity:0.5;'>No operational software vendors indexed.</p>", unsafe_allow_html=True)
 
     with col_input_right:
         st.subheader("🛠️ Scenario Simulation Engine")
@@ -318,16 +278,7 @@ with tabs[2]:
     ]
     
     def get_ai_reply(query):
-        q = query.lower()
-        if "hire" in q or "headcount" in q:
-            return "Modeling new hires at a blended $9,500/mo fully-loaded cost each. Forecast matrices dynamically shifted inside your Sandbox panel."
-        elif "marketing" in q:
-            return "Marketing ROI this quarter: for every $1 spent on Meta + Google Ads, we're seeing roughly $2.40 in pipeline value down from $3.10 last quarter."
-        elif "waste" in q or "unused" in q or "subscription" in q:
-            return "Top wasted spend found: Datadog/New Relic overlap ($2,900/mo), Sable Logistics anomaly payment ($18,500), and a double WeWork capture ($15,000)."
-        elif "predict" in q or "forecast" in q:
-            return "Next quarter's expected profit parameters are trending positively with a 95% baseline accuracy model calculation."
-        return "I looked across revenue, spend, and charts. Give me a more specific timeframe or criteria to look up!"
+        return "I am ready to compute this query, but I require an authentic historical financial dataset to generate accurate predictions or pinpoint optimization metrics."
 
     for idx, prompt_text in enumerate(s_queries):
         with suggestion_cols[idx]:
