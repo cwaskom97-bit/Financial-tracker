@@ -143,7 +143,7 @@ styles = """
     </style>
 """.format(bg=bg_color, txt=text_color, card=card_color, border=border_color)
 
-st.markdown(styles, unsafe_allowed_html=True)
+st.markdown(styles, unsafe_allow_html=True)
 
 # Top Navbar Area
 col_title, col_theme = st.columns([9, 1])
@@ -204,7 +204,7 @@ with tabs[0]:
         </div>
         """.format(border=border_color, runway=runway_val)
         
-        st.markdown(gauge_html, unsafe_allowed_html=True)
+        st.markdown(gauge_html, unsafe_allow_html=True)
 
     st.subheader("Budget vs Actual Expenditures by Department")
     dept_chart = DEPARTMENTS.set_index("Department")[["Budget", "Actual"]]
@@ -236,7 +236,7 @@ with tabs[1]:
                 <span style='font-family: monospace; color:#d4a94f;'>Est Impact: {impact}/mo</span>
             </div>
             """.format(title=alert['title'], severity=alert['severity'], detail=alert['detail'], impact=fmt(alert['impact']))
-            st.markdown(alert_html, unsafe_allowed_html=True)
+            st.markdown(alert_html, unsafe_allow_html=True)
 
     with col_recomms:
         st.subheader("✨ Autonomous AI Optimizations")
@@ -250,7 +250,7 @@ with tabs[1]:
                 <p style='font-size: 11px; opacity: 0.7; margin-top: 5px;'>Effort Complexity: {effort}</p>
             </div>
             """.format(title=rec['title'], impact=fmt(rec['impact']), effort=rec['effort'])
-            st.markdown(rec_html, unsafe_allowed_html=True)
+            st.markdown(rec_html, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------
@@ -280,7 +280,7 @@ with tabs[2]:
                     <b>PO Registry Status:</b> {status}
                 </div>
                 """.format(file=uploaded_file.name, vendor=v_choice, amount=fmt(amt_choice), status='Matched' if po_match else 'No matching PO Found')
-                st.markdown(invoice_html, unsafe_allowed_html=True)
+                st.markdown(invoice_html, unsafe_allow_html=True)
 
         st.subheader("📋 Active Contract & Renewal Schedules")
         st.table(pd.DataFrame(VENDORS))
